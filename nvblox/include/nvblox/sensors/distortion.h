@@ -33,9 +33,9 @@ struct RadialDistortionParams {
 
   __host__ __device__ inline bool operator==(
       const RadialDistortionParams& other) const {
-    return std::abs(k1 - other.k1) <= 1e-6 && std::abs(k2 - other.k2) <= 1e-6 &&
-           std::abs(k3 - other.k3) <= 1e-6 && std::abs(k4 - other.k4) <= 1e-6 &&
-           std::abs(k5 - other.k5) <= 1e-6 && std::abs(k6 - other.k6) <= 1e-6;
+    return fabsf(k1 - other.k1) <= 1e-6 && fabsf(k2 - other.k2) <= 1e-6 &&
+           fabsf(k3 - other.k3) <= 1e-6 && fabsf(k4 - other.k4) <= 1e-6 &&
+           fabsf(k5 - other.k5) <= 1e-6 && fabsf(k6 - other.k6) <= 1e-6;
   }
 };
 
@@ -48,7 +48,7 @@ struct TangentialDistortionParams {
 
   __host__ __device__ inline bool operator==(
       const TangentialDistortionParams& other) const {
-    return std::abs(p1 - other.p1) <= 1e-6 && std::abs(p2 - other.p2) <= 1e-6;
+    return fabsf(p1 - other.p1) <= 1e-6 && fabsf(p2 - other.p2) <= 1e-6;
   }
 };
 

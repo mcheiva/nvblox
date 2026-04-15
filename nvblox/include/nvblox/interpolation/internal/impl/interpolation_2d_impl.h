@@ -99,7 +99,7 @@ struct PixelAlwaysValid {
 struct PixelIsValidDepth {
   __host__ __device__ static inline bool check(const float& pixel_value) {
     constexpr float kEps = 1e-6;
-    return std::isfinite(pixel_value) && pixel_value > kEps;
+    return isfinite(pixel_value) && pixel_value > kEps;
   }
 };
 

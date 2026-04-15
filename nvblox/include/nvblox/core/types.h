@@ -172,7 +172,7 @@ __host__ __device__ inline bool allFinite(
   static_assert(Eigen::internal::traits<Derived>::ColsAtCompileTime == 1,
                 "allFinite only works with column vectors, not matrices");
   for (int i = 0; i < vec.size(); ++i) {
-    if (!std::isfinite(vec[i])) {
+    if (!isfinite(vec[i])) {
       return false;
     }
   }

@@ -166,7 +166,7 @@ Vector2f removeDistortion(
     const double delta_y = (-c * error_x + a * error_y) / det;
 
     // Apply step.
-    if (std::isfinite(delta_x) && std::isfinite(delta_y)) {
+    if (isfinite(delta_x) && isfinite(delta_y)) {
       x = x - delta_x;
       y = y - delta_y;
     }

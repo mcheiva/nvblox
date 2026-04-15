@@ -55,7 +55,7 @@ class NvbloxRecipe(ConanFile):
     def generate(self):
         tc = CMakeToolchain(self, generator="Ninja")
         tc.preprocessor_definitions["NOMINMAX"] = ""
-        tc.variables["BUILD_TESTING"] = True
+        tc.variables["BUILD_TESTING"] = False
         tc.variables["BUILD_BENCHMARKS"] = False
         tc.variables["BUILD_EXPERIMENTS"] = False
         tc.variables["BUILD_EXAMPLES"] = False

@@ -1,3 +1,57 @@
+diff --git a/nvblox/CMakeLists.txt b/nvblox/CMakeLists.txt
+index 86ddebf..ef54037 100644
+--- a/nvblox/CMakeLists.txt
++++ b/nvblox/CMakeLists.txt
+@@ -27,6 +27,17 @@ include(thirdparty/benchmark/benchmark.cmake)
+ # to avoid warnings we have no control over TODO(dtingdahl) Fix pytorch warnings
+ # and re-enable these flags add_compile_options(-Wall -Wextra -Wshadow)
+ 
++if(WIN32)
++  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
++  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ignore:4099")
++  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /ignore:4099")
++  set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4099")
++
++  set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
++  set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
++  set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
++endif()
++
+ # ##############################################################################
+ # INCLUDES #
+ # ##############################################################################
+@@ -140,11 +151,10 @@ add_nvblox_shared_library(
+   glog::glog
+   gflags
+   nvblox_eigen
+-  CUDA::cudart
++  nvblox_gpu_hash
+   LINK_LIBRARIES_PRIVATE
+   nvblox_stdgpu
+-  nvblox_gpu_hash
+-  sqlite3
++  SQLite::SQLite3
+   CUDA::nppc
+   CUDA::nppial
+   CUDA::nppitc
+@@ -154,7 +164,7 @@ add_nvblox_shared_library(
+   ${THRUST_INCLUDE_DIR}
+   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+   $<INSTALL_INTERFACE:include>)
+-
++  
+ # ##############################################################################
+ # BINARIES #
+ # ##############################################################################
+@@ -198,7 +208,7 @@ add_subdirectory(experiments)
+ include(GNUInstallDirs)
+ 
+ install(
+-  TARGETS nvblox_lib nvblox_datasets nvblox_eigen fuse_3dmatch fuse_replica
++  TARGETS nvblox_lib nvblox_gpu_hash
+   EXPORT nvbloxTargets
+   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
+   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 diff --git a/nvblox/executables/src/datasets/cusfm_data.cpp b/nvblox/executables/src/datasets/cusfm_data.cpp
 index 8f7bd90..01727a5 100644
 --- a/nvblox/executables/src/datasets/cusfm_data.cpp

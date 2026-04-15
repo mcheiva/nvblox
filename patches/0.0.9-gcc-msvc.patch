@@ -1,117 +1,3 @@
-diff --git a/CMakeLists.txt b/CMakeLists.txt
-index ff4be96..f14bf7d 100644
---- a/CMakeLists.txt
-+++ b/CMakeLists.txt
-@@ -10,6 +10,13 @@ if(NOT CMAKE_BUILD_TYPE)
-         FORCE)
- endif(NOT CMAKE_BUILD_TYPE)
- 
-+# Set the project name and version. Note that this will also set
-+# CMAKE_CUDA_ARCHITECTURES to a default (potentially non-native) value
-+project(
-+  nvblox
-+  VERSION 0.0.9
-+  LANGUAGES CXX C CUDA)
-+
- # By default we build for the native cuda architecture. Customize by passing
- # '-DCMAKE_CUDA_ARCHITECTURES=89;75;72' to cmake.
- if(DEFINED CMAKE_CUDA_ARCHITECTURES)
-@@ -18,13 +25,6 @@ else()
-   set(CMAKE_CUDA_ARCHITECTURES_SET_EXTERNALLY FALSE)
- endif()
- 
--# Set the project name and version. Note that this will also set
--# CMAKE_CUDA_ARCHITECTURES to a default (potentially non-native) value
--project(
--  nvblox
--  VERSION 0.0.9
--  LANGUAGES CXX C CUDA)
--
- # ##############################################################################
- # OPTIONS AND SETTINGS #
- # ##############################################################################
-diff --git a/cmake/nvblox_targets.cmake b/cmake/nvblox_targets.cmake
-index 90065a4..727dffc 100644
---- a/cmake/nvblox_targets.cmake
-+++ b/cmake/nvblox_targets.cmake
-@@ -54,8 +54,8 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
-   # they are distributed.
-   set_target_properties(${target_name} PROPERTIES BUILD_RPATH_USE_ORIGIN on)
- 
--  # c++17 compilation. We use c++17 features.
--  add_host_compiler_option(${target_name} "-std=gnu++17")
-+  # c++20 compilation. We use c++20 features.
-+  add_host_compiler_option(${target_name} "-std=gnu++20")
- 
-   # ############################################################################
-   # PREPROCESSOR DIRECTIVES
-@@ -104,7 +104,7 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
-   # ############################################################################
-   # EXTENDED WARNINGS
-   # ############################################################################
--  if(enable_warnings)
-+  if(enable_warnings AND NOT MSVC)
-     add_host_compiler_option(${target_name} "-Wall")
-     add_host_compiler_option(${target_name} "-Wextra")
-     add_host_compiler_option(${target_name} "-Wshadow")
-diff --git a/nvblox/CMakeLists.txt b/nvblox/CMakeLists.txt
-index 86ddebf..ec3f641 100644
---- a/nvblox/CMakeLists.txt
-+++ b/nvblox/CMakeLists.txt
-@@ -27,6 +27,13 @@ include(thirdparty/benchmark/benchmark.cmake)
- # to avoid warnings we have no control over TODO(dtingdahl) Fix pytorch warnings
- # and re-enable these flags add_compile_options(-Wall -Wextra -Wshadow)
- 
-+if(WIN32)
-+  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
-+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ignore:4099")
-+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /ignore:4099")
-+  set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4099")
-+endif()
-+
- # ##############################################################################
- # INCLUDES #
- # ##############################################################################
-@@ -59,6 +66,7 @@ add_nvblox_static_library(
-   src/gpu_hash/color_layer_specialization.cu
-   src/gpu_hash/occupancy_layer_specialization.cu
-   src/gpu_hash/mesh_layer_specialization.cu
-+  src/gpu_hash/gpu_layer_view.cu
-   LINK_LIBRARIES_PUBLIC
-   nvblox_eigen
-   LINK_LIBRARIES_PRIVATE
-@@ -140,11 +148,10 @@ add_nvblox_shared_library(
-   glog::glog
-   gflags
-   nvblox_eigen
--  CUDA::cudart
-+  nvblox_gpu_hash
-   LINK_LIBRARIES_PRIVATE
-   nvblox_stdgpu
--  nvblox_gpu_hash
--  sqlite3
-+  SQLite::SQLite3
-   CUDA::nppc
-   CUDA::nppial
-   CUDA::nppitc
-@@ -154,7 +161,7 @@ add_nvblox_shared_library(
-   ${THRUST_INCLUDE_DIR}
-   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
-   $<INSTALL_INTERFACE:include>)
--
-+  
- # ##############################################################################
- # BINARIES #
- # ##############################################################################
-@@ -198,7 +205,7 @@ add_subdirectory(experiments)
- include(GNUInstallDirs)
- 
- install(
--  TARGETS nvblox_lib nvblox_datasets nvblox_eigen fuse_3dmatch fuse_replica
-+  TARGETS nvblox_lib nvblox_gpu_hash
-   EXPORT nvbloxTargets
-   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
-   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 diff --git a/nvblox/executables/src/datasets/cusfm_data.cpp b/nvblox/executables/src/datasets/cusfm_data.cpp
 index 8f7bd90..01727a5 100644
 --- a/nvblox/executables/src/datasets/cusfm_data.cpp
@@ -157,6 +43,55 @@ index f3eb73d..0430421 100644
  
   private:
    pointer ptr_;
+diff --git a/nvblox/include/nvblox/core/types.h b/nvblox/include/nvblox/core/types.h
+index 0157004..8994f52 100644
+--- a/nvblox/include/nvblox/core/types.h
++++ b/nvblox/include/nvblox/core/types.h
+@@ -15,6 +15,7 @@ limitations under the License.
+ */
+ #pragma once
+ 
++#include <cmath>
+ #include <glog/logging.h>
+ #include <iostream>
+ #include <vector>
+@@ -163,6 +164,27 @@ enum class InterpolationType { kNearestNeighbor, kLinear };
+ 
+ typedef Eigen::ParametrizedLine<float, 3> Ray;
+ 
++/// Cross-platform isfinite for __host__ __device__ functions.
++/// Device code uses CUDA's built-in; host code uses std::isfinite.
++template <typename T>
++__host__ __device__ inline bool isFinite(T value) {
++#ifdef __CUDA_ARCH__
++  return ::isfinite(value);
++#else
++  return std::isfinite(value);
++#endif
++}
++
++/// Cross-platform fabs for __host__ __device__ functions.
++template <typename T>
++__host__ __device__ inline T hostDeviceAbs(T value) {
++#ifdef __CUDA_ARCH__
++  return ::fabs(value);
++#else
++  return std::fabs(value);
++#endif
++}
++
+ /// Replacement for Eigen's allFinite() function for vectors.
+ /// This is because Eigen's allFinite() function is not available in CUDA.
+ /// Note: This function only works with column vectors, not matrices.
+@@ -172,7 +194,7 @@ __host__ __device__ inline bool allFinite(
+   static_assert(Eigen::internal::traits<Derived>::ColsAtCompileTime == 1,
+                 "allFinite only works with column vectors, not matrices");
+   for (int i = 0; i < vec.size(); ++i) {
+-    if (!std::isfinite(vec[i])) {
++    if (!isFinite(vec[i])) {
+       return false;
+     }
+   }
 diff --git a/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh b/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh
 index b6ac87a..d2ac308 100644
 --- a/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh
@@ -179,6 +114,19 @@ index b6ac87a..d2ac308 100644
    const dim3 num_blocks(divideRoundUp(cols, kThreadsPerThreadBlock.x),
                          divideRoundUp(rows, kThreadsPerThreadBlock.y), 1);
    findDynamicPointsKernel<SensorType>
+diff --git a/nvblox/include/nvblox/interpolation/internal/impl/interpolation_2d_impl.h b/nvblox/include/nvblox/interpolation/internal/impl/interpolation_2d_impl.h
+index 581db3f..26ac46d 100644
+--- a/nvblox/include/nvblox/interpolation/internal/impl/interpolation_2d_impl.h
++++ b/nvblox/include/nvblox/interpolation/internal/impl/interpolation_2d_impl.h
+@@ -99,7 +99,7 @@ struct PixelAlwaysValid {
+ struct PixelIsValidDepth {
+   __host__ __device__ static inline bool check(const float& pixel_value) {
+     constexpr float kEps = 1e-6;
+-    return std::isfinite(pixel_value) && pixel_value > kEps;
++    return nvblox::isFinite(pixel_value) && pixel_value > kEps;
+   }
+ };
+ 
 diff --git a/nvblox/include/nvblox/io/internal/impl/csv_impl.h b/nvblox/include/nvblox/io/internal/impl/csv_impl.h
 index b5e268e..ca1beb5 100644
 --- a/nvblox/include/nvblox/io/internal/impl/csv_impl.h
@@ -205,6 +153,49 @@ index 0aa9638..5f33f1e 100644
    const dim3 num_blocks(divideRoundUp(image.cols(), kThreadsPerThreadBlock.x),
                          divideRoundUp(image.rows(), kThreadsPerThreadBlock.y),
                          1);
+diff --git a/nvblox/include/nvblox/sensors/distortion.h b/nvblox/include/nvblox/sensors/distortion.h
+index e587963..b0bd121 100644
+--- a/nvblox/include/nvblox/sensors/distortion.h
++++ b/nvblox/include/nvblox/sensors/distortion.h
+@@ -33,9 +33,12 @@ struct RadialDistortionParams {
+ 
+   __host__ __device__ inline bool operator==(
+       const RadialDistortionParams& other) const {
+-    return std::abs(k1 - other.k1) <= 1e-6 && std::abs(k2 - other.k2) <= 1e-6 &&
+-           std::abs(k3 - other.k3) <= 1e-6 && std::abs(k4 - other.k4) <= 1e-6 &&
+-           std::abs(k5 - other.k5) <= 1e-6 && std::abs(k6 - other.k6) <= 1e-6;
++    return hostDeviceAbs(k1 - other.k1) <= 1e-6f &&
++           hostDeviceAbs(k2 - other.k2) <= 1e-6f &&
++           hostDeviceAbs(k3 - other.k3) <= 1e-6f &&
++           hostDeviceAbs(k4 - other.k4) <= 1e-6f &&
++           hostDeviceAbs(k5 - other.k5) <= 1e-6f &&
++           hostDeviceAbs(k6 - other.k6) <= 1e-6f;
+   }
+ };
+ 
+@@ -48,7 +51,8 @@ struct TangentialDistortionParams {
+ 
+   __host__ __device__ inline bool operator==(
+       const TangentialDistortionParams& other) const {
+-    return std::abs(p1 - other.p1) <= 1e-6 && std::abs(p2 - other.p2) <= 1e-6;
++    return hostDeviceAbs(p1 - other.p1) <= 1e-6f &&
++           hostDeviceAbs(p2 - other.p2) <= 1e-6f;
+   }
+ };
+ 
+diff --git a/nvblox/include/nvblox/sensors/internal/impl/distortion_impl.h b/nvblox/include/nvblox/sensors/internal/impl/distortion_impl.h
+index 36f13b2..c3d91a6 100644
+--- a/nvblox/include/nvblox/sensors/internal/impl/distortion_impl.h
++++ b/nvblox/include/nvblox/sensors/internal/impl/distortion_impl.h
+@@ -166,7 +166,7 @@ Vector2f removeDistortion(
+     const double delta_y = (-c * error_x + a * error_y) / det;
+ 
+     // Apply step.
+-    if (std::isfinite(delta_x) && std::isfinite(delta_y)) {
++    if (nvblox::isFinite(delta_x) && nvblox::isFinite(delta_y)) {
+       x = x - delta_x;
+       y = y - delta_y;
+     }
 diff --git a/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h b/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h
 index 5ef402d..6cbfc08 100644
 --- a/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h
@@ -321,24 +312,6 @@ index a6689d5..556b935 100644
    if (std::abs(angle_between_cameras_deg) > angular_tolerance_deg) {
      return false;
    }
-diff --git a/nvblox/src/gpu_hash/gpu_layer_view.cu b/nvblox/src/gpu_hash/gpu_layer_view.cu
-index 69daadc..b927e82 100644
---- a/nvblox/src/gpu_hash/gpu_layer_view.cu
-+++ b/nvblox/src/gpu_hash/gpu_layer_view.cu
-@@ -27,9 +27,11 @@ namespace nvblox {
- // Compile Specializations for the standard block types.
- template class GPULayerView<TsdfBlock>;
- template class GPULayerView<FreespaceBlock>;
-+template class GPULayerView<OccupancyBlock>;
- template class GPULayerView<EsdfBlock>;
- template class GPULayerView<ColorBlock>;
--template class GPULayerView<OccupancyBlock>;
--template class GPULayerView<MeshBlock>;
-+template class GPULayerView<FeatureBlock>;
-+template class GPULayerView<ColorMeshBlock>;
-+template class GPULayerView<FeatureMeshBlock>;
- 
- }  // namespace nvblox
 diff --git a/nvblox/src/integrators/esdf_slicer.cu b/nvblox/src/integrators/esdf_slicer.cu
 index cba888f..75cbf78 100644
 --- a/nvblox/src/integrators/esdf_slicer.cu

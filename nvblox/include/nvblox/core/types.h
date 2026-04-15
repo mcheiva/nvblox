@@ -15,6 +15,7 @@ limitations under the License.
 */
 #pragma once
 
+#include <cmath>
 #include <glog/logging.h>
 #include <iostream>
 #include <vector>
@@ -163,6 +164,27 @@ enum class InterpolationType { kNearestNeighbor, kLinear };
 
 typedef Eigen::ParametrizedLine<float, 3> Ray;
 
+/// Cross-platform isfinite for __host__ __device__ functions.
+/// Device code uses CUDA's built-in; host code uses std::isfinite.
+template <typename T>
+__host__ __device__ inline bool isFinite(T value) {
+#ifdef __CUDA_ARCH__
+  return ::isfinite(value);
+#else
+  return std::isfinite(value);
+#endif
+}
+
+/// Cross-platform fabs for __host__ __device__ functions.
+template <typename T>
+__host__ __device__ inline T hostDeviceAbs(T value) {
+#ifdef __CUDA_ARCH__
+  return ::fabs(value);
+#else
+  return std::fabs(value);
+#endif
+}
+
 /// Replacement for Eigen's allFinite() function for vectors.
 /// This is because Eigen's allFinite() function is not available in CUDA.
 /// Note: This function only works with column vectors, not matrices.
@@ -172,7 +194,7 @@ __host__ __device__ inline bool allFinite(
   static_assert(Eigen::internal::traits<Derived>::ColsAtCompileTime == 1,
                 "allFinite only works with column vectors, not matrices");
   for (int i = 0; i < vec.size(); ++i) {
-    if (!isfinite(vec[i])) {
+    if (!isFinite(vec[i])) {
       return false;
     }
   }

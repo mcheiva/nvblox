@@ -28,7 +28,7 @@ std::string getIndexedPath(const std::string& dir, const std::string& prefix,
   std::ostringstream oss;
   oss << prefix << std::setw(num_digits) << std::setfill('0') << idx << ext;
   const std::string filename = oss.str();
-  return std::filesystem::path(dir) / filename;
+  return (std::filesystem::path(dir) / filename).generic_string();
 }
 
 template <typename Derived>

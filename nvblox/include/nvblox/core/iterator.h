@@ -91,6 +91,10 @@ struct RawIterator {
                                              const RawIterator& b) {
     return a.ptr_ != b.ptr_;
   };
+  __host__ __device__ friend bool operator<(const RawIterator& a,
+                                             const RawIterator& b) {
+    return a.ptr_ < b.ptr_;
+  };
 
  private:
   pointer ptr_;

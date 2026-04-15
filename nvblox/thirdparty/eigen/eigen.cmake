@@ -1,8 +1,6 @@
 if(USE_SYSTEM_EIGEN)
   find_package(Eigen3 REQUIRED)
-  add_library(nvblox_eigen INTERFACE)
-  target_include_directories(nvblox_eigen SYSTEM
-                             INTERFACE ${EIGEN3_INCLUDE_DIR})
+  add_library(nvblox_eigen ALIAS Eigen3::Eigen)
 else()
   include(ExternalProject)
 

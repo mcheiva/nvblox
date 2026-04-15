@@ -27,6 +27,13 @@ include(thirdparty/benchmark/benchmark.cmake)
 # to avoid warnings we have no control over TODO(dtingdahl) Fix pytorch warnings
 # and re-enable these flags add_compile_options(-Wall -Wextra -Wshadow)
 
+if(WIN32)
+  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ignore:4099")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /ignore:4099")
+  set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4099")
+endif()
+
 # ##############################################################################
 # INCLUDES #
 # ##############################################################################
@@ -59,6 +66,7 @@ add_nvblox_static_library(
   src/gpu_hash/color_layer_specialization.cu
   src/gpu_hash/occupancy_layer_specialization.cu
   src/gpu_hash/mesh_layer_specialization.cu
+  src/gpu_hash/gpu_layer_view.cu
   LINK_LIBRARIES_PUBLIC
   nvblox_eigen
   LINK_LIBRARIES_PRIVATE
@@ -140,11 +148,10 @@ add_nvblox_shared_library(
   glog::glog
   gflags
   nvblox_eigen
-  CUDA::cudart
+  nvblox_gpu_hash
   LINK_LIBRARIES_PRIVATE
   nvblox_stdgpu
-  nvblox_gpu_hash
-  sqlite3
+  SQLite::SQLite3
   CUDA::nppc
   CUDA::nppial
   CUDA::nppitc
@@ -154,7 +161,7 @@ add_nvblox_shared_library(
   ${THRUST_INCLUDE_DIR}
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-
+  
 # ##############################################################################
 # BINARIES #
 # ##############################################################################
@@ -198,7 +205,7 @@ add_subdirectory(experiments)
 include(GNUInstallDirs)
 
 install(
-  TARGETS nvblox_lib nvblox_datasets nvblox_eigen fuse_3dmatch fuse_replica
+  TARGETS nvblox_lib nvblox_gpu_hash
   EXPORT nvbloxTargets
   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

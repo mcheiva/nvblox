@@ -464,7 +464,7 @@ void SphereTracer::renderImageOnGPU(const Camera& camera,
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks(
       divideRoundUp(depth_ptr->cols(), kThreadsPerThreadBlock.x),
       divideRoundUp(depth_ptr->rows(), kThreadsPerThreadBlock.y), 1);
@@ -530,7 +530,7 @@ void SphereTracer::renderRgbdImageOnGPU(
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks(divideRoundUp(image_width, kThreadsPerThreadBlock.y),
                         divideRoundUp(image_height, kThreadsPerThreadBlock.x),
                         1);

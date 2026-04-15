@@ -17,10 +17,12 @@ limitations under the License.
 #pragma once
 
 #include "math.h"
+#include <numbers>
 
 #include "nvblox/core/internal/error_check.h"
 #include "nvblox/geometry/transforms.h"
 #include "nvblox/interpolation/interpolation_2d.h"
+
 
 namespace nvblox {
 
@@ -63,7 +65,7 @@ Lidar::Lidar(int num_azimuth_divisions, int num_elevation_divisions,
   rads_per_pixel_elevation_ =
       vertical_fov_rad_ / static_cast<float>(num_elevation_divisions_ - 1);
   rads_per_pixel_azimuth_ =
-      2.0f * M_PI / static_cast<float>(num_azimuth_divisions_);
+      2.0f * std::numbers::pi_v<float> / static_cast<float>(num_azimuth_divisions_);
 
   // Inverse of the above
   elevation_pixels_per_rad_ = 1.0f / rads_per_pixel_elevation_;
@@ -75,9 +77,9 @@ Lidar::Lidar(int num_azimuth_divisions, int num_elevation_divisions,
   // below this.
   // Note(alexmillane): Note that we use polar angle here, not elevation.
   // Polar is from the top of the sphere down, elevation, the middle up.
-  start_polar_angle_rad_ = M_PI / 2.0f - (max_angle_above_zero_elevation_rad +
+  start_polar_angle_rad_ = std::numbers::pi_v<float> / 2.0f - (max_angle_above_zero_elevation_rad +
                                           rads_per_pixel_elevation_ / 2.0f);
-  start_azimuth_angle_rad_ = -M_PI - rads_per_pixel_azimuth_ / 2.0f;
+  start_azimuth_angle_rad_ = -std::numbers::pi_v<float> - rads_per_pixel_azimuth_ / 2.0f;
 }
 
 int Lidar::num_azimuth_divisions() const { return num_azimuth_divisions_; }
@@ -235,7 +237,7 @@ bool operator==(const Lidar& lhs, const Lidar& rhs) {
 }
 
 std::ostream& operator<<(std::ostream& os, const Lidar& lidar) {
-  constexpr float kRadToDegrees = 180.0f / M_PI;
+  constexpr float kRadToDegrees = 180.0f / std::numbers::pi_v<float>;
   os << "Lidar with intrinsics:\n"
      << "\tnum_azimuth_divisions: " << lidar.num_azimuth_divisions() << "\n"
      << "\tnum_elevation_divisions: " << lidar.num_elevation_divisions() << "\n"

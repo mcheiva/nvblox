@@ -27,7 +27,7 @@ __device__ inline Color getOverlayColor(const bool is_dynamic,
                                         const float depth) {
   constexpr float max_display_depth_m = 10.f;
   constexpr float depth_scale_factor = 255.0f / max_display_depth_m;
-  const uint8_t scaled_depth = fmin(depth_scale_factor * depth, 255u);
+  const uint8_t scaled_depth = fminf(depth_scale_factor * depth, 255.0f);
 
   // Dynamics shown in red and rest greyish scaled depending on depth
   return Color(is_dynamic * 255u, scaled_depth, scaled_depth);
@@ -102,7 +102,7 @@ void DynamicsDetection::computeDynamics(const DepthImage& depth_frame_C,
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks(divideRoundUp(cols, kThreadsPerThreadBlock.x),
                         divideRoundUp(rows, kThreadsPerThreadBlock.y), 1);
   findDynamicPointsKernel<SensorType>

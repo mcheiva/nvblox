@@ -257,7 +257,7 @@ void EsdfSlicer::occupancyGridFromSliceImage(const Image<float>& slice_image,
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks(
       slice_image.cols() / kThreadsPerThreadBlock.x + 1,  // NOLINT
       slice_image.rows() / kThreadsPerThreadBlock.y + 1,  // NOLINT

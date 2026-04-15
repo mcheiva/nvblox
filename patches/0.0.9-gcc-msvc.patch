@@ -1,0 +1,462 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index ff4be96..f14bf7d 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -10,6 +10,13 @@ if(NOT CMAKE_BUILD_TYPE)
+         FORCE)
+ endif(NOT CMAKE_BUILD_TYPE)
+ 
++# Set the project name and version. Note that this will also set
++# CMAKE_CUDA_ARCHITECTURES to a default (potentially non-native) value
++project(
++  nvblox
++  VERSION 0.0.9
++  LANGUAGES CXX C CUDA)
++
+ # By default we build for the native cuda architecture. Customize by passing
+ # '-DCMAKE_CUDA_ARCHITECTURES=89;75;72' to cmake.
+ if(DEFINED CMAKE_CUDA_ARCHITECTURES)
+@@ -18,13 +25,6 @@ else()
+   set(CMAKE_CUDA_ARCHITECTURES_SET_EXTERNALLY FALSE)
+ endif()
+ 
+-# Set the project name and version. Note that this will also set
+-# CMAKE_CUDA_ARCHITECTURES to a default (potentially non-native) value
+-project(
+-  nvblox
+-  VERSION 0.0.9
+-  LANGUAGES CXX C CUDA)
+-
+ # ##############################################################################
+ # OPTIONS AND SETTINGS #
+ # ##############################################################################
+diff --git a/cmake/nvblox_targets.cmake b/cmake/nvblox_targets.cmake
+index 90065a4..727dffc 100644
+--- a/cmake/nvblox_targets.cmake
++++ b/cmake/nvblox_targets.cmake
+@@ -54,8 +54,8 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
+   # they are distributed.
+   set_target_properties(${target_name} PROPERTIES BUILD_RPATH_USE_ORIGIN on)
+ 
+-  # c++17 compilation. We use c++17 features.
+-  add_host_compiler_option(${target_name} "-std=gnu++17")
++  # c++20 compilation. We use c++20 features.
++  add_host_compiler_option(${target_name} "-std=gnu++20")
+ 
+   # ############################################################################
+   # PREPROCESSOR DIRECTIVES
+@@ -104,7 +104,7 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
+   # ############################################################################
+   # EXTENDED WARNINGS
+   # ############################################################################
+-  if(enable_warnings)
++  if(enable_warnings AND NOT MSVC)
+     add_host_compiler_option(${target_name} "-Wall")
+     add_host_compiler_option(${target_name} "-Wextra")
+     add_host_compiler_option(${target_name} "-Wshadow")
+diff --git a/nvblox/CMakeLists.txt b/nvblox/CMakeLists.txt
+index 86ddebf..ec3f641 100644
+--- a/nvblox/CMakeLists.txt
++++ b/nvblox/CMakeLists.txt
+@@ -27,6 +27,13 @@ include(thirdparty/benchmark/benchmark.cmake)
+ # to avoid warnings we have no control over TODO(dtingdahl) Fix pytorch warnings
+ # and re-enable these flags add_compile_options(-Wall -Wextra -Wshadow)
+ 
++if(WIN32)
++  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
++  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ignore:4099")
++  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} /ignore:4099")
++  set(CMAKE_STATIC_LINKER_FLAGS "${CMAKE_STATIC_LINKER_FLAGS} /ignore:4099")
++endif()
++
+ # ##############################################################################
+ # INCLUDES #
+ # ##############################################################################
+@@ -59,6 +66,7 @@ add_nvblox_static_library(
+   src/gpu_hash/color_layer_specialization.cu
+   src/gpu_hash/occupancy_layer_specialization.cu
+   src/gpu_hash/mesh_layer_specialization.cu
++  src/gpu_hash/gpu_layer_view.cu
+   LINK_LIBRARIES_PUBLIC
+   nvblox_eigen
+   LINK_LIBRARIES_PRIVATE
+@@ -140,11 +148,10 @@ add_nvblox_shared_library(
+   glog::glog
+   gflags
+   nvblox_eigen
+-  CUDA::cudart
++  nvblox_gpu_hash
+   LINK_LIBRARIES_PRIVATE
+   nvblox_stdgpu
+-  nvblox_gpu_hash
+-  sqlite3
++  SQLite::SQLite3
+   CUDA::nppc
+   CUDA::nppial
+   CUDA::nppitc
+@@ -154,7 +161,7 @@ add_nvblox_shared_library(
+   ${THRUST_INCLUDE_DIR}
+   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
+   $<INSTALL_INTERFACE:include>)
+-
++  
+ # ##############################################################################
+ # BINARIES #
+ # ##############################################################################
+@@ -198,7 +205,7 @@ add_subdirectory(experiments)
+ include(GNUInstallDirs)
+ 
+ install(
+-  TARGETS nvblox_lib nvblox_datasets nvblox_eigen fuse_3dmatch fuse_replica
++  TARGETS nvblox_lib nvblox_gpu_hash
+   EXPORT nvbloxTargets
+   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
+   LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+diff --git a/nvblox/executables/src/datasets/cusfm_data.cpp b/nvblox/executables/src/datasets/cusfm_data.cpp
+index 8f7bd90..01727a5 100644
+--- a/nvblox/executables/src/datasets/cusfm_data.cpp
++++ b/nvblox/executables/src/datasets/cusfm_data.cpp
+@@ -27,6 +27,7 @@ limitations under the License.
+ #include <optional>
+ #include <sstream>
+ #include <type_traits>
++#include <numbers>
+ 
+ #include "nvblox/utils/timing.h"
+ 
+@@ -445,7 +446,7 @@ nvblox::Transform transformFromRigidTransform3dJson(const SimpleJson& json) {
+   }
+ 
+   // Build transform with double precision
+-  Eigen::AngleAxisd axis_angle(angle_deg * M_PI / 180.0, axis);
++  Eigen::AngleAxisd axis_angle(angle_deg * std::numbers::pi / 180.0, axis);
+   Eigen::Matrix3d rotation_d = axis_angle.matrix();
+   Eigen::Vector3d translation_d(x, y, z);
+ 
+@@ -894,7 +895,7 @@ void DataLoader::computeZPlaneTransform() {
+     T_world_to_z0_plane_.linear() = Eigen::Matrix3f::Identity();
+   } else if ((plane_normal + target_normal).norm() < 1e-10) {
+     // If plane normal is opposite to z-axis, rotate 180 degrees around x-axis
+-    Eigen::AngleAxisd rotation_d(M_PI, Eigen::Vector3d::UnitX());
++    Eigen::AngleAxisd rotation_d(std::numbers::pi, Eigen::Vector3d::UnitX());
+     T_world_to_z0_plane_.linear() = rotation_d.matrix().cast<float>();
+   } else {
+     // Compute rotation using Rodrigues' formula
+diff --git a/nvblox/include/nvblox/core/iterator.h b/nvblox/include/nvblox/core/iterator.h
+index f3eb73d..0430421 100644
+--- a/nvblox/include/nvblox/core/iterator.h
++++ b/nvblox/include/nvblox/core/iterator.h
+@@ -91,6 +91,10 @@ struct RawIterator {
+                                              const RawIterator& b) {
+     return a.ptr_ != b.ptr_;
+   };
++  __host__ __device__ friend bool operator<(const RawIterator& a,
++                                             const RawIterator& b) {
++    return a.ptr_ < b.ptr_;
++  };
+ 
+  private:
+   pointer ptr_;
+diff --git a/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh b/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh
+index b6ac87a..d2ac308 100644
+--- a/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh
++++ b/nvblox/include/nvblox/dynamics/internal/cuda/impl/dynamics_detection_impl.cuh
+@@ -27,7 +27,7 @@ __device__ inline Color getOverlayColor(const bool is_dynamic,
+                                         const float depth) {
+   constexpr float max_display_depth_m = 10.f;
+   constexpr float depth_scale_factor = 255.0f / max_display_depth_m;
+-  const uint8_t scaled_depth = fmin(depth_scale_factor * depth, 255u);
++  const uint8_t scaled_depth = fminf(depth_scale_factor * depth, 255.0f);
+ 
+   // Dynamics shown in red and rest greyish scaled depending on depth
+   return Color(is_dynamic * 255u, scaled_depth, scaled_depth);
+@@ -102,7 +102,7 @@ void DynamicsDetection::computeDynamics(const DepthImage& depth_frame_C,
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(divideRoundUp(cols, kThreadsPerThreadBlock.x),
+                         divideRoundUp(rows, kThreadsPerThreadBlock.y), 1);
+   findDynamicPointsKernel<SensorType>
+diff --git a/nvblox/include/nvblox/io/internal/impl/csv_impl.h b/nvblox/include/nvblox/io/internal/impl/csv_impl.h
+index b5e268e..ca1beb5 100644
+--- a/nvblox/include/nvblox/io/internal/impl/csv_impl.h
++++ b/nvblox/include/nvblox/io/internal/impl/csv_impl.h
+@@ -28,7 +28,7 @@ std::string getIndexedPath(const std::string& dir, const std::string& prefix,
+   std::ostringstream oss;
+   oss << prefix << std::setw(num_digits) << std::setfill('0') << idx << ext;
+   const std::string filename = oss.str();
+-  return std::filesystem::path(dir) / filename;
++  return (std::filesystem::path(dir) / filename).generic_string();
+ }
+ 
+ template <typename Derived>
+diff --git a/nvblox/include/nvblox/semantics/internal/cuda/impl/image_projector_impl.cuh b/nvblox/include/nvblox/semantics/internal/cuda/impl/image_projector_impl.cuh
+index 0aa9638..5f33f1e 100644
+--- a/nvblox/include/nvblox/semantics/internal/cuda/impl/image_projector_impl.cuh
++++ b/nvblox/include/nvblox/semantics/internal/cuda/impl/image_projector_impl.cuh
+@@ -68,7 +68,7 @@ void DepthImageBackProjector::backProjectOnGPU(
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(divideRoundUp(image.cols(), kThreadsPerThreadBlock.x),
+                         divideRoundUp(image.rows(), kThreadsPerThreadBlock.y),
+                         1);
+diff --git a/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h b/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h
+index 5ef402d..6cbfc08 100644
+--- a/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h
++++ b/nvblox/include/nvblox/sensors/internal/impl/lidar_impl.h
+@@ -17,11 +17,13 @@ limitations under the License.
+ #pragma once
+ 
+ #include "math.h"
++#include <numbers>
+ 
+ #include "nvblox/core/internal/error_check.h"
+ #include "nvblox/geometry/transforms.h"
+ #include "nvblox/interpolation/interpolation_2d.h"
+ 
++
+ namespace nvblox {
+ 
+ Lidar::Lidar(int num_azimuth_divisions, int num_elevation_divisions,
+@@ -63,7 +65,7 @@ Lidar::Lidar(int num_azimuth_divisions, int num_elevation_divisions,
+   rads_per_pixel_elevation_ =
+       vertical_fov_rad_ / static_cast<float>(num_elevation_divisions_ - 1);
+   rads_per_pixel_azimuth_ =
+-      2.0f * M_PI / static_cast<float>(num_azimuth_divisions_);
++      2.0f * std::numbers::pi_v<float> / static_cast<float>(num_azimuth_divisions_);
+ 
+   // Inverse of the above
+   elevation_pixels_per_rad_ = 1.0f / rads_per_pixel_elevation_;
+@@ -75,9 +77,9 @@ Lidar::Lidar(int num_azimuth_divisions, int num_elevation_divisions,
+   // below this.
+   // Note(alexmillane): Note that we use polar angle here, not elevation.
+   // Polar is from the top of the sphere down, elevation, the middle up.
+-  start_polar_angle_rad_ = M_PI / 2.0f - (max_angle_above_zero_elevation_rad +
++  start_polar_angle_rad_ = std::numbers::pi_v<float> / 2.0f - (max_angle_above_zero_elevation_rad +
+                                           rads_per_pixel_elevation_ / 2.0f);
+-  start_azimuth_angle_rad_ = -M_PI - rads_per_pixel_azimuth_ / 2.0f;
++  start_azimuth_angle_rad_ = -std::numbers::pi_v<float> - rads_per_pixel_azimuth_ / 2.0f;
+ }
+ 
+ int Lidar::num_azimuth_divisions() const { return num_azimuth_divisions_; }
+@@ -235,7 +237,7 @@ bool operator==(const Lidar& lhs, const Lidar& rhs) {
+ }
+ 
+ std::ostream& operator<<(std::ostream& os, const Lidar& lidar) {
+-  constexpr float kRadToDegrees = 180.0f / M_PI;
++  constexpr float kRadToDegrees = 180.0f / std::numbers::pi_v<float>;
+   os << "Lidar with intrinsics:\n"
+      << "\tnum_azimuth_divisions: " << lidar.num_azimuth_divisions() << "\n"
+      << "\tnum_elevation_divisions: " << lidar.num_elevation_divisions() << "\n"
+diff --git a/nvblox/src/benchmarks/sphere_benchmark.cpp b/nvblox/src/benchmarks/sphere_benchmark.cpp
+index eb19a5f..f70e43e 100644
+--- a/nvblox/src/benchmarks/sphere_benchmark.cpp
++++ b/nvblox/src/benchmarks/sphere_benchmark.cpp
+@@ -15,6 +15,7 @@ limitations under the License.
+ */
+ #include <fstream>
+ #include <iostream>
++#include <numbers>
+ 
+ #include "nvblox/core/internal/warmup_cuda.h"
+ #include "nvblox/integrators/esdf_integrator.h"
+@@ -31,6 +32,7 @@ limitations under the License.
+ #include "nvblox/sensors/camera.h"
+ #include "nvblox/sensors/image.h"
+ #include "nvblox/utils/timing.h"
++#include "nvblox/nvblox.h"
+ 
+ namespace nvblox {
+ 
+@@ -105,7 +107,7 @@ void SphereBenchmark::runBenchmark() {
+ 
+   // Simulate a trajectory of the requisite amount of points, on the circle
+   // around the sphere.
+-  const float radians_increment = 2 * M_PI / (kNumTrajectoryPoints);
++  const float radians_increment = 2 * std::numbers::pi_v<float> / (kNumTrajectoryPoints);
+ 
+   // Create a depth frame. We share this memory buffer for the entire
+   // trajectory.
+@@ -121,7 +123,7 @@ void SphereBenchmark::runBenchmark() {
+     // The camera has its z axis pointing towards the origin.
+     Eigen::Quaternionf rotation_base(0.5, 0.5, 0.5, 0.5);
+     Eigen::Quaternionf rotation_theta(
+-        Eigen::AngleAxisf(M_PI + theta, Vector3f::UnitZ()));
++        Eigen::AngleAxisf(std::numbers::pi_v<float> + theta, Vector3f::UnitZ()));
+ 
+     // Construct a transform from camera to scene with this.
+     Transform T_S_C = Transform::Identity();
+@@ -175,7 +177,7 @@ int main(int argc, char* argv[]) {
+   if (argc >= 2) {
+     output_mesh_path = argv[1];
+   }
+-
++  
+   nvblox::SphereBenchmark benchmark;
+   benchmark.runBenchmark();
+ 
+diff --git a/nvblox/src/geometry/transforms.cpp b/nvblox/src/geometry/transforms.cpp
+index a6689d5..556b935 100644
+--- a/nvblox/src/geometry/transforms.cpp
++++ b/nvblox/src/geometry/transforms.cpp
+@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+ */
++#include <numbers>
+ #include "nvblox/core/types.h"
+ 
+ namespace nvblox {
+@@ -28,7 +29,7 @@ bool arePosesClose(const Transform& T_A_B1, const Transform& T_A_B2,
+   const float angle_between_cameras_rad =
+       Eigen::AngleAxisf(T_B1_B2.rotation()).angle();
+   const float angle_between_cameras_deg =
+-      angle_between_cameras_rad * 180.0f / M_PI;
++      angle_between_cameras_rad * 180.0f / std::numbers::pi_v<float>;
+   if (std::abs(angle_between_cameras_deg) > angular_tolerance_deg) {
+     return false;
+   }
+diff --git a/nvblox/src/gpu_hash/gpu_layer_view.cu b/nvblox/src/gpu_hash/gpu_layer_view.cu
+index 69daadc..b927e82 100644
+--- a/nvblox/src/gpu_hash/gpu_layer_view.cu
++++ b/nvblox/src/gpu_hash/gpu_layer_view.cu
+@@ -27,9 +27,11 @@ namespace nvblox {
+ // Compile Specializations for the standard block types.
+ template class GPULayerView<TsdfBlock>;
+ template class GPULayerView<FreespaceBlock>;
++template class GPULayerView<OccupancyBlock>;
+ template class GPULayerView<EsdfBlock>;
+ template class GPULayerView<ColorBlock>;
+-template class GPULayerView<OccupancyBlock>;
+-template class GPULayerView<MeshBlock>;
++template class GPULayerView<FeatureBlock>;
++template class GPULayerView<ColorMeshBlock>;
++template class GPULayerView<FeatureMeshBlock>;
+ 
+ }  // namespace nvblox
+diff --git a/nvblox/src/integrators/esdf_slicer.cu b/nvblox/src/integrators/esdf_slicer.cu
+index cba888f..75cbf78 100644
+--- a/nvblox/src/integrators/esdf_slicer.cu
++++ b/nvblox/src/integrators/esdf_slicer.cu
+@@ -257,7 +257,7 @@ void EsdfSlicer::occupancyGridFromSliceImage(const Image<float>& slice_image,
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(
+       slice_image.cols() / kThreadsPerThreadBlock.x + 1,  // NOLINT
+       slice_image.rows() / kThreadsPerThreadBlock.y + 1,  // NOLINT
+diff --git a/nvblox/src/rays/sphere_tracer.cu b/nvblox/src/rays/sphere_tracer.cu
+index ac63849..8388d50 100644
+--- a/nvblox/src/rays/sphere_tracer.cu
++++ b/nvblox/src/rays/sphere_tracer.cu
+@@ -464,7 +464,7 @@ void SphereTracer::renderImageOnGPU(const Camera& camera,
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(
+       divideRoundUp(depth_ptr->cols(), kThreadsPerThreadBlock.x),
+       divideRoundUp(depth_ptr->rows(), kThreadsPerThreadBlock.y), 1);
+@@ -530,7 +530,7 @@ void SphereTracer::renderRgbdImageOnGPU(
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(divideRoundUp(image_width, kThreadsPerThreadBlock.y),
+                         divideRoundUp(image_height, kThreadsPerThreadBlock.x),
+                         1);
+diff --git a/nvblox/src/semantics/image_masker.cu b/nvblox/src/semantics/image_masker.cu
+index f040e0d..08cd0c7 100644
+--- a/nvblox/src/semantics/image_masker.cu
++++ b/nvblox/src/semantics/image_masker.cu
+@@ -62,7 +62,7 @@ __global__ void splitColorImageKernel(const Color* input, const uint8_t* mask,
+   if (masked_depth_overlay) {
+     const Color input_color = image::access(row_idx, col_idx, cols, input);
+     image::access(row_idx, col_idx, cols, masked_depth_overlay) =
+-        Color(std::fmax(input_color.r(), is_masked * 255u), input_color.g(),
++        Color(fmaxf(input_color.r(), is_masked * 255.0f), input_color.g(),
+               input_color.b());
+   }
+ 
+@@ -156,14 +156,14 @@ __global__ void splitDepthImageKernel(
+   // The depth overlay image can be used for visualization and debugging
+   if (masked_depth_overlay) {
+     constexpr float max_depth_display_m = 20.f;
+-    constexpr float scale_factor = 255u / max_depth_display_m;
+-    const uint8_t scaled_depth = fmin(scale_factor * depth, 255u);
++    constexpr float scale_factor = 255.0f / max_depth_display_m;
++    const uint8_t scaled_depth = fminf(scale_factor * depth, 255.0f);
+     image::access(row_idx, col_idx, depth_camera.cols(), masked_depth_overlay) =
+         Color(scaled_depth, scaled_depth, scaled_depth);
+   }
+ 
+   // If the depth is infinite, the input pixel is not masked
+-  if (std::isinf(depth)) {
++  if (isinf(depth)) {
+     copyToUnmaskedOutput(depth_input, row_idx, col_idx, depth_camera.cols(),
+                          masked_image_invalid_pixel, unmasked_depth_output,
+                          masked_depth_output);
+@@ -281,7 +281,7 @@ static void splitImageOnGPUTemplate(
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks(divideRoundUp(input.cols(), kThreadsPerThreadBlock.x),
+                         divideRoundUp(input.rows(), kThreadsPerThreadBlock.y),
+                         1);
+@@ -337,7 +337,7 @@ void ImageMasker::splitImageOnGPU(
+   // - 1 thread per pixel
+   // - 8 x 8 threads per thread block
+   // - N x M thread blocks get 1 thread per pixel
+-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
++  const dim3 kThreadsPerThreadBlock(8, 8, 1);
+   const dim3 num_blocks_depth(
+       divideRoundUp(depth_input.cols(), kThreadsPerThreadBlock.x),
+       divideRoundUp(depth_input.rows(), kThreadsPerThreadBlock.y), 1);
+diff --git a/nvblox/thirdparty/eigen/eigen.cmake b/nvblox/thirdparty/eigen/eigen.cmake
+index e5802ab..86b035d 100644
+--- a/nvblox/thirdparty/eigen/eigen.cmake
++++ b/nvblox/thirdparty/eigen/eigen.cmake
+@@ -1,8 +1,6 @@
+ if(USE_SYSTEM_EIGEN)
+   find_package(Eigen3 REQUIRED)
+-  add_library(nvblox_eigen INTERFACE)
+-  target_include_directories(nvblox_eigen SYSTEM
+-                             INTERFACE ${EIGEN3_INCLUDE_DIR})
++  add_library(nvblox_eigen ALIAS Eigen3::Eigen)
+ else()
+   include(ExternalProject)
+ 
+diff --git a/nvblox/thirdparty/sqlite/sqlite.cmake b/nvblox/thirdparty/sqlite/sqlite.cmake
+index d4c75d5..cd2275d 100644
+--- a/nvblox/thirdparty/sqlite/sqlite.cmake
++++ b/nvblox/thirdparty/sqlite/sqlite.cmake
+@@ -1,5 +1,5 @@
+ if(USE_SYSTEM_SQLITE3)
+-  find_package(sqlite3 REQUIRED)
++  find_package(SQLite3 REQUIRED)
+ else()
+   include(FetchContent)
+ 
+diff --git a/nvblox/thirdparty/stdgpu/stdgpu.cmake b/nvblox/thirdparty/stdgpu/stdgpu.cmake
+index 937dbd6..4decc63 100644
+--- a/nvblox/thirdparty/stdgpu/stdgpu.cmake
++++ b/nvblox/thirdparty/stdgpu/stdgpu.cmake
+@@ -1,6 +1,6 @@
+ if(USE_SYSTEM_STDGPU)
+   find_package(stdgpu REQUIRED)
+-  add_library(nvblox_stdgpu ALIAS stdgpu::stdgpu)
++  add_library(nvblox_stdgpu ALIAS stdgpu)
+ else()
+   include(FetchContent)
+ 

@@ -27,6 +27,7 @@ limitations under the License.
 #include <optional>
 #include <sstream>
 #include <type_traits>
+#include <numbers>
 
 #include "nvblox/utils/timing.h"
 
@@ -445,7 +446,7 @@ nvblox::Transform transformFromRigidTransform3dJson(const SimpleJson& json) {
   }
 
   // Build transform with double precision
-  Eigen::AngleAxisd axis_angle(angle_deg * M_PI / 180.0, axis);
+  Eigen::AngleAxisd axis_angle(angle_deg * std::numbers::pi / 180.0, axis);
   Eigen::Matrix3d rotation_d = axis_angle.matrix();
   Eigen::Vector3d translation_d(x, y, z);
 
@@ -894,7 +895,7 @@ void DataLoader::computeZPlaneTransform() {
     T_world_to_z0_plane_.linear() = Eigen::Matrix3f::Identity();
   } else if ((plane_normal + target_normal).norm() < 1e-10) {
     // If plane normal is opposite to z-axis, rotate 180 degrees around x-axis
-    Eigen::AngleAxisd rotation_d(M_PI, Eigen::Vector3d::UnitX());
+    Eigen::AngleAxisd rotation_d(std::numbers::pi, Eigen::Vector3d::UnitX());
     T_world_to_z0_plane_.linear() = rotation_d.matrix().cast<float>();
   } else {
     // Compute rotation using Rodrigues' formula

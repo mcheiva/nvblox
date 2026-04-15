@@ -62,7 +62,7 @@ __global__ void splitColorImageKernel(const Color* input, const uint8_t* mask,
   if (masked_depth_overlay) {
     const Color input_color = image::access(row_idx, col_idx, cols, input);
     image::access(row_idx, col_idx, cols, masked_depth_overlay) =
-        Color(std::fmax(input_color.r(), is_masked * 255u), input_color.g(),
+        Color(fmaxf(input_color.r(), is_masked * 255.0f), input_color.g(),
               input_color.b());
   }
 
@@ -156,14 +156,14 @@ __global__ void splitDepthImageKernel(
   // The depth overlay image can be used for visualization and debugging
   if (masked_depth_overlay) {
     constexpr float max_depth_display_m = 20.f;
-    constexpr float scale_factor = 255u / max_depth_display_m;
-    const uint8_t scaled_depth = fmin(scale_factor * depth, 255u);
+    constexpr float scale_factor = 255.0f / max_depth_display_m;
+    const uint8_t scaled_depth = fminf(scale_factor * depth, 255.0f);
     image::access(row_idx, col_idx, depth_camera.cols(), masked_depth_overlay) =
         Color(scaled_depth, scaled_depth, scaled_depth);
   }
 
   // If the depth is infinite, the input pixel is not masked
-  if (std::isinf(depth)) {
+  if (isinf(depth)) {
     copyToUnmaskedOutput(depth_input, row_idx, col_idx, depth_camera.cols(),
                          masked_image_invalid_pixel, unmasked_depth_output,
                          masked_depth_output);
@@ -281,7 +281,7 @@ static void splitImageOnGPUTemplate(
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks(divideRoundUp(input.cols(), kThreadsPerThreadBlock.x),
                         divideRoundUp(input.rows(), kThreadsPerThreadBlock.y),
                         1);
@@ -337,7 +337,7 @@ void ImageMasker::splitImageOnGPU(
   // - 1 thread per pixel
   // - 8 x 8 threads per thread block
   // - N x M thread blocks get 1 thread per pixel
-  constexpr dim3 kThreadsPerThreadBlock(8, 8, 1);
+  const dim3 kThreadsPerThreadBlock(8, 8, 1);
   const dim3 num_blocks_depth(
       divideRoundUp(depth_input.cols(), kThreadsPerThreadBlock.x),
       divideRoundUp(depth_input.rows(), kThreadsPerThreadBlock.y), 1);

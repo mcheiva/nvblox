@@ -13,6 +13,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+#include <numbers>
 #include "nvblox/core/types.h"
 
 namespace nvblox {
@@ -28,7 +29,7 @@ bool arePosesClose(const Transform& T_A_B1, const Transform& T_A_B2,
   const float angle_between_cameras_rad =
       Eigen::AngleAxisf(T_B1_B2.rotation()).angle();
   const float angle_between_cameras_deg =
-      angle_between_cameras_rad * 180.0f / M_PI;
+      angle_between_cameras_rad * 180.0f / std::numbers::pi_v<float>;
   if (std::abs(angle_between_cameras_deg) > angular_tolerance_deg) {
     return false;
   }

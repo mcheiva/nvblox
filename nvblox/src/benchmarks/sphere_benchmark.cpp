@@ -15,6 +15,7 @@ limitations under the License.
 */
 #include <fstream>
 #include <iostream>
+#include <numbers>
 
 #include "nvblox/core/internal/warmup_cuda.h"
 #include "nvblox/integrators/esdf_integrator.h"
@@ -31,6 +32,7 @@ limitations under the License.
 #include "nvblox/sensors/camera.h"
 #include "nvblox/sensors/image.h"
 #include "nvblox/utils/timing.h"
+#include "nvblox/nvblox.h"
 
 namespace nvblox {
 
@@ -105,7 +107,7 @@ void SphereBenchmark::runBenchmark() {
 
   // Simulate a trajectory of the requisite amount of points, on the circle
   // around the sphere.
-  const float radians_increment = 2 * M_PI / (kNumTrajectoryPoints);
+  const float radians_increment = 2 * std::numbers::pi_v<float> / (kNumTrajectoryPoints);
 
   // Create a depth frame. We share this memory buffer for the entire
   // trajectory.
@@ -121,7 +123,7 @@ void SphereBenchmark::runBenchmark() {
     // The camera has its z axis pointing towards the origin.
     Eigen::Quaternionf rotation_base(0.5, 0.5, 0.5, 0.5);
     Eigen::Quaternionf rotation_theta(
-        Eigen::AngleAxisf(M_PI + theta, Vector3f::UnitZ()));
+        Eigen::AngleAxisf(std::numbers::pi_v<float> + theta, Vector3f::UnitZ()));
 
     // Construct a transform from camera to scene with this.
     Transform T_S_C = Transform::Identity();
@@ -175,7 +177,7 @@ int main(int argc, char* argv[]) {
   if (argc >= 2) {
     output_mesh_path = argv[1];
   }
-
+  
   nvblox::SphereBenchmark benchmark;
   benchmark.runBenchmark();
 

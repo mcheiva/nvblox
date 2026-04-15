@@ -54,8 +54,8 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   # they are distributed.
   set_target_properties(${target_name} PROPERTIES BUILD_RPATH_USE_ORIGIN on)
 
-  # c++17 compilation. We use c++17 features.
-  add_host_compiler_option(${target_name} "-std=gnu++17")
+  # c++20 compilation. We use c++20 features.
+  add_host_compiler_option(${target_name} "-std=gnu++20")
 
   # ############################################################################
   # PREPROCESSOR DIRECTIVES
@@ -104,7 +104,7 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   # ############################################################################
   # EXTENDED WARNINGS
   # ############################################################################
-  if(enable_warnings)
+  if(enable_warnings AND NOT MSVC)
     add_host_compiler_option(${target_name} "-Wall")
     add_host_compiler_option(${target_name} "-Wextra")
     add_host_compiler_option(${target_name} "-Wshadow")

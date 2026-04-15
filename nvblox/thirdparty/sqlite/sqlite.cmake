@@ -1,5 +1,5 @@
 if(USE_SYSTEM_SQLITE3)
-  find_package(sqlite3 REQUIRED)
+  find_package(SQLite3 REQUIRED)
 else()
   include(FetchContent)
 

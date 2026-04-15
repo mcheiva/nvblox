@@ -66,7 +66,6 @@ add_nvblox_static_library(
   src/gpu_hash/color_layer_specialization.cu
   src/gpu_hash/occupancy_layer_specialization.cu
   src/gpu_hash/mesh_layer_specialization.cu
-  src/gpu_hash/gpu_layer_view.cu
   LINK_LIBRARIES_PUBLIC
   nvblox_eigen
   LINK_LIBRARIES_PRIVATE

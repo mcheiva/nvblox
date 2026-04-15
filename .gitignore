@@ -68,3 +68,4 @@ nvblox_torch/nvblox_torch/_version.py
 
 # Python version file for pyenv
 .python-version
+CMakeUserPresets.json

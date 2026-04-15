@@ -15,7 +15,9 @@ function(add_host_compiler_option target_name option)
   target_compile_options(${target_name}
                          PRIVATE $<$<COMPILE_LANGUAGE:CXX>:${option}>)
 
-  add_device_compiler_option(${target_name} -Xcompiler=${option})
+  if(NOT MSVC)
+    add_device_compiler_option(${target_name} -Xcompiler=${option})
+  endif()
 endfunction()
 
 # -------------------------------------------------------------------
@@ -45,7 +47,9 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   # independent code
   set_property(TARGET ${target_name} PROPERTY POSITION_INDEPENDENT_CODE ON)
   # Better output for profiling
-  add_host_compiler_option(${target_name} "-fno-omit-frame-pointer")
+  if(NOT MSVC)
+    add_host_compiler_option(${target_name} "-fno-omit-frame-pointer")
+  endif()
   # Flag to use relative RPATHs. This allows the libraries to find each other
   # also when they are distributed.
   set_property(TARGET ${target_name} PROPERTY CMAKE_BUILD_RPATH_USE_ORIGIN on)
@@ -55,7 +59,12 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   set_target_properties(${target_name} PROPERTIES BUILD_RPATH_USE_ORIGIN on)
 
   # c++20 compilation. We use c++20 features.
-  add_host_compiler_option(${target_name} "-std=gnu++20")
+  if(MSVC)
+    target_compile_options(${target_name} PRIVATE
+      $<$<COMPILE_LANGUAGE:CXX>:/std:c++20>)
+  else()
+    add_host_compiler_option(${target_name} "-std=gnu++20")
+  endif()
 
   # ############################################################################
   # PREPROCESSOR DIRECTIVES
@@ -96,7 +105,7 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   # ############################################################################
   # gcc SANITIZER FLAGS
   # ############################################################################
-  if(USE_SANITIZER)
+  if(USE_SANITIZER AND NOT MSVC)
     add_host_compiler_option(${target_name} "-fsanitize=address")
     target_link_options(${target_name} PRIVATE "-fsanitize=address")
   endif()
@@ -119,24 +128,39 @@ function(set_nvblox_compiler_options_internal target_name enable_warnings)
   # ############################################################################
   string(TOLOWER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_LOWER)
   if(CMAKE_BUILD_TYPE_LOWER STREQUAL "debug")
-    add_host_compiler_option(${target_name} "-g")
-    add_host_compiler_option(${target_name} "-O0")
+    if(MSVC)
+      add_host_compiler_option(${target_name} "/Zi")
+      add_host_compiler_option(${target_name} "/Od")
+    else()
+      add_host_compiler_option(${target_name} "-g")
+      add_host_compiler_option(${target_name} "-O0")
+    endif()
 
     add_device_compiler_option(${target_name} "--debug")
     add_device_compiler_option(${target_name} "--device-debug")
     add_device_compiler_option(${target_name} "-O0")
 
   elseif(CMAKE_BUILD_TYPE_LOWER STREQUAL "relwithdebinfo")
-    add_host_compiler_option(${target_name} "-g")
-    add_host_compiler_option(${target_name} "-O2")
+    if(MSVC)
+      add_host_compiler_option(${target_name} "/Zi")
+      add_host_compiler_option(${target_name} "/O2")
+    else()
+      add_host_compiler_option(${target_name} "-g")
+      add_host_compiler_option(${target_name} "-O2")
+    endif()
 
     add_device_compiler_option(${target_name} "--debug")
     add_device_compiler_option(${target_name} "--generate-line-info")
     add_device_compiler_option(${target_name} "-O2")
 
   elseif(CMAKE_BUILD_TYPE_LOWER STREQUAL "release")
-    add_host_compiler_option(${target_name} "-O3")
-    add_host_compiler_option(${target_name} "-DNDEBUG")
+    if(MSVC)
+      add_host_compiler_option(${target_name} "/O2")
+      add_host_compiler_option(${target_name} "/DNDEBUG")
+    else()
+      add_host_compiler_option(${target_name} "-O3")
+      add_host_compiler_option(${target_name} "-DNDEBUG")
+    endif()
 
     add_device_compiler_option(${target_name} "-DNDEBUG")
     add_device_compiler_option(${target_name} "-O3")

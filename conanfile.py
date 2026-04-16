@@ -55,6 +55,11 @@ class NvbloxRecipe(ConanFile):
     def generate(self):
         tc = CMakeToolchain(self, generator="Ninja")
         tc.preprocessor_definitions["NOMINMAX"] = ""
+
+        cuda_archs = self.conf.get("user.nvblox:cuda_architectures")
+        if cuda_archs:
+            tc.cache_variables["CMAKE_CUDA_ARCHITECTURES"] = cuda_archs
+
         tc.variables["BUILD_TESTING"] = False
         tc.variables["BUILD_BENCHMARKS"] = False
         tc.variables["BUILD_EXPERIMENTS"] = False

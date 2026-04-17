@@ -149,15 +149,21 @@ index 86ddebf..ef54037 100644
  # ##############################################################################
  # BINARIES #
  # ##############################################################################
-@@ -198,7 +208,7 @@ add_subdirectory(experiments)
+@@ -198,11 +208,11 @@ add_subdirectory(experiments)
  include(GNUInstallDirs)
  
  install(
 -  TARGETS nvblox_lib nvblox_datasets nvblox_eigen fuse_3dmatch fuse_replica
 +  TARGETS nvblox_lib nvblox_gpu_hash
    EXPORT nvbloxTargets
-   ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
+-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}
++  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}/${PROJECT_NAME}
++  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+   INCLUDES
+   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}
+   PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
 diff --git a/nvblox/executables/src/datasets/cusfm_data.cpp b/nvblox/executables/src/datasets/cusfm_data.cpp
 index 8f7bd90..01727a5 100644
 --- a/nvblox/executables/src/datasets/cusfm_data.cpp
@@ -593,3 +599,4 @@ index 937dbd6..4decc63 100644
  else()
    include(FetchContent)
  
+
